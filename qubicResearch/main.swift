@@ -7,5 +7,8 @@
 
 import Foundation
 
-print("Hello, World!")
-
+let board = Board()
+board.addMove(0, for: 0)
+board.addMove(1, for: 0)
+board.addMove(5, for: 0)
+print(board.hasW2(0) ?? false)
