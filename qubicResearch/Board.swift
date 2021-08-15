@@ -102,24 +102,6 @@ class Board {
 		}
 	}
 	
-//    func processMove(_ p: Int) -> Bool {
-//        guard (0..<64).contains(p) else { return false }
-//        guard pointEmpty(p) else { return false }
-//        addMove(p, for: getTurn())
-//        return true
-		
-//        var printed = false
-//        for d in 1..<10 {
-//            let w2 = (hasW2(0, depth: d), false)
-//            if w2.0 || w2.1 {
-//                print("\(d):", w2.0, w2.1)
-//                printed = true
-//                break
-//            }
-//        }
-//        if !printed { print("nothing") }
-//    }
-	
 	func getWinLines(for p: Int) -> [Int]? {
 		let lines = Board.linesThruPoint[p].filter({ status[$0] == 8 || status[$0] == 0 })
 		return !lines.isEmpty || numMoves() == 64 ? lines : nil

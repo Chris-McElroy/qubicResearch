@@ -207,10 +207,10 @@ extension Board {
 		return blocks.isEmpty ? nil : blocks
 	}
 	
-	func hasW2P(for n: Int, depth: Int) -> Bool {
+	func hasW2P(_ n: Int, depth: Int = 32) -> Bool {
 		if depth == 0 { return false }
 		let o = n^1
-		if let w2 = cachedHasW2[n] { return w2 <= depth }
+//		if let w2 = cachedHasW2[n] { return w2 <= depth }
 		var forces: [Force] = move[n].map { Force(p: $0) }
 		var forceBoard: [[Int]] = Array(repeating: [], count: 64)
 		var force1 = 0
@@ -223,40 +223,49 @@ extension Board {
 		}
 		
 		func findWins() -> Bool {
-			for force2 in forceBoard[forces[force1].g] {
+			search: for force2 in forceBoard[forces[force1].g] {
 				// check that force1 and force2 do not conflict
 				guard noConflict(force2) else { continue }
 				
 				// see if the sequence creates check
-				var checks: [(g: Int, c: Int, r: UInt64)] = []
-				fillChecks(force: force1)
-				fillChecks(force: force2)
+				var checks: Set<Int> = []
+				var newChecks: [Int] = [force1, force2]
+				while let force = newChecks.popLast() {
+					checks.insert(force)
+					newChecks.append(contentsOf: forces[force].from)
+				}
 				
 				let checkBoard = Board(self)
-				let path: [Int] = [] // TODO change to var when i'm writing this again
+				var used: Set<Int> = []
 				
-				while path.count < checks.count {
+				while true {
 					let opWins = checkBoard.getW1(for: o)
 					if !opWins.isEmpty {
-						let gain = opWins.first!
-						if let check = checks.first(where: { $0.g == gain }),
-						   (check.r & checkBoard.board[n] == check.r) && (opWins.count == 1) {
-							// the check is solvable
-							checkBoard.addMove(check.g, for: n)
-							checkBoard.addMove(check.c, for: o)
-						} else {
-							// give up and reset
-							
-							// wrong — there are more cases tham this
-						}
+						continue search // TODO handle checkbacks
+//						let gain = opWins.first!
+//						if let check = checks.first(where: { $0.g == gain }),
+//						   (check.r & checkBoard.board[n] == check.r) && (opWins.count == 1) {
+//							// the check is solvable
+//							checkBoard.addMove(check.g, for: n)
+//							checkBoard.addMove(check.c, for: o)
+//						} else {
+//							// give up and reset
+//
+//							// wrong — there are more cases tham this
+//						}df
 					} else {
-						
-//						checkBoard.addMove(gain)
-//						checkBoard.addMove(cost)
+						if let check = checks.subtracting(used).first(where: { forces[$0].gains & checkBoard.board[n] | (1 &<< forces[$0].g) == forces[$0].gains }) {
+							if checkBoard.pointFull(forces[check].g) { break } // got to the end
+							checkBoard.addMove(forces[check].g, for: n)
+							checkBoard.addMove(forces[check].c!, for: o)
+							used.insert(check)
+						} else {
+							continue search
+						}
 					}
 				}
 				
-				
+				return used.count <= depth
 				
 //				if checkBoard.hasW1(o) || checkBoard.hasW0(o) {
 //					continue // we can't stop these wins
@@ -267,15 +276,6 @@ extension Board {
 //					if checks.count < (cachedHasW2[n] ?? 64) { cachedHasW2[n] = checks.count }
 //					if checks.count < depth { return true }
 //				}
-				
-				@discardableResult func fillChecks(force: Int) -> UInt64 {
-					guard let cost = forces[force].c else { return 0 }
-					let r = (1 &<< forces[force].g)
-						| fillChecks(force: forces[force].from1!)
-						| fillChecks(force: forces[force].from2!)
-					checks.append((forces[force].g, cost, r))
-					return r
-				}
 			}
 			
 			return false
@@ -304,8 +304,8 @@ extension Board {
 						let all = forces[force1].all | forces[force2].all | (1 &<< c3) | (1 &<< c4)
 						let gains = forces[force1].gains | forces[force2].gains
 						let costs = forces[force1].costs | forces[force2].costs
-						forces.append(Force(g: c3, c: c4, all: all, gains: gains | (1 &<< c3), costs: costs | (1 &<< c4), from1: force1, from2: force2))
-						forces.append(Force(g: c4, c: c3, all: all, gains: gains | (1 &<< c4), costs: costs | (1 &<< c3), from1: force1, from2: force2))
+						forces.append(Force(g: c3, c: c4, all: all, gains: gains | (1 &<< c3), costs: costs | (1 &<< c4), from: [force1, force2]))
+						forces.append(Force(g: c4, c: c3, all: all, gains: gains | (1 &<< c4), costs: costs | (1 &<< c3), from: [force1, force2]))
 					}
 				}
 			}
@@ -324,8 +324,8 @@ extension Board {
 			func fillDict(force: Int) {
 				guard let cost = forces[force].c else { return }
 				costsDict[cost] = forces[force].g
-				fillDict(force: forces[force].from1 ?? 0)
-				fillDict(force: forces[force].from2 ?? 0)
+				fillDict(force: forces[force].from[0])
+				fillDict(force: forces[force].from[1])
 			}
 			
 			func checkDict(force: Int) -> Bool {
@@ -333,8 +333,7 @@ extension Board {
 				if let oldGain = costsDict.updateValue(forces[force].g, forKey: cost), oldGain != forces[force].g {
 					return false
 				}
-				return checkDict(force: forces[force].from1 ?? 0)
-					&& checkDict(force: forces[force].from2 ?? 0)
+				return checkDict(force: forces[force].from[0]) && checkDict(force: forces[force].from[1])
 			}
 			
 			fillDict(force: force1)
@@ -350,8 +349,7 @@ extension Board {
 		let all: UInt64
 		let gains: UInt64
 		let costs: UInt64
-		let from1: Int?
-		let from2: Int?
+		let from: [Int]
 		
 		init(p: Int) {
 			g = p
@@ -359,18 +357,16 @@ extension Board {
 			all = 0
 			gains = 0
 			costs = 0
-			from1 = nil
-			from2 = nil
+			from = []
 		}
 		
-		init(g: Int, c: Int, all: UInt64, gains: UInt64, costs: UInt64, from1: Int, from2: Int) {
+		init(g: Int, c: Int, all: UInt64, gains: UInt64, costs: UInt64, from: [Int]) {
 			self.g = g
 			self.c = c
 			self.all = all
 			self.gains = gains
 			self.costs = costs
-			self.from1 = from1
-			self.from2 = from2
+			self.from = from
 		}
 	}
 	
