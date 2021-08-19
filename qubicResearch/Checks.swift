@@ -122,36 +122,33 @@ extension Board {
 		}
 	}
 	
-	func hasW2(_ n: Int, depth: Int = 32, time: TimeInterval = 30, valid: () -> Bool = { true }) -> Bool? {
-		if depth == 0 { return false }
-		if let w2 = cachedHasW2[n] { return w2 <= depth }
+	func hasW2(_ n: Int, depth: Int = 32) -> Int? {
+		if depth == 0 { return nil }
+//		if let w2 = cachedHasW2[n] { return w2 }
 		let o = n^1
 		var stack: Set<W2Board> = [W2Board(board: self, n: n, starts: [])]
 		var nextStack: Set<W2Board> = []
-		let start = Date.now
 		
 		for d in 1...depth {
 			for b in stack {
 				guard nextStack.count < 40000 else { break }
-				guard valid() else { print("tripped hasW2"); return nil }
 				if b.board.hasW1(o) {
 					if b.addCheckMove(n, &nextStack, d == 1) != nil {
-						cachedHasW2[n] = d
-						return true
+//						cachedHasW2[n] = d
+						return d
 					}
 				} else {
 					if b.addAllForces(n, &nextStack, d == 1) != nil {
-						cachedHasW2[n] = d
-						return true
+//						cachedHasW2[n] = d
+						return d
 					}
 				}
 			}
 			stack = nextStack
 			nextStack = []
-			if Date.now > start + time { return nil }
 		}
-		if depth >= 32 { cachedHasW2[n] = Int.max }
-		return false
+//		if depth >= 32 { cachedHasW2[n] = Int.max }
+		return nil
 	}
 	
 	func getW2(for n: Int, depth: Int = 32, time: TimeInterval = 30, valid: () -> Bool = { true }) -> Set<Int>? {
@@ -191,14 +188,14 @@ extension Board {
 		var blocks: Set<Int> = []
 		let o = n^1
 		if hasW1(n) { return nil } // I should handle this case but I'm not
-		if hasW2(o) == false { return nil }
+		if hasW2(o) == nil { return nil }
 		let checks = open[2+4*n].values.joined() // same for removing checks below
 		let options = Array(0..<64).filter({ pointEmpty($0) && !checks.contains($0) })
 		let start = Date.now
 		for p in options.shuffled() {
 			guard valid() else { print("tripped getW2Blocks"); return nil }
 			checkBoard.addMove(p, for: n)
-			if checkBoard.hasW2(o, depth: depth, time: time - (Date.now - start)) == false { blocks.insert(p) }
+			if checkBoard.hasW2(o, depth: depth) == nil { blocks.insert(p) }
 			checkBoard.undoMove(for: n)
 			if Date.now > start + time { break }
 		}
@@ -207,25 +204,27 @@ extension Board {
 		return blocks.isEmpty ? nil : blocks
 	}
 	
-	func hasW2P(_ n: Int, depth: Int = 32) -> Bool {
-		if depth == 0 { return false }
+	func hasW2P(_ n: Int, depth: Int = 32) -> Int? {
+		if depth == 0 { return nil }
 		let o = n^1
 //		if let w2 = cachedHasW2[n] { return w2 <= depth }
 		var forces: [Force] = move[n].map { Force(p: $0) }
 		var forceBoard: [[Int]] = Array(repeating: [], count: 64)
 		var force1 = 0
+		var attempts = 0
 		
 		while force1 < forces.count {
-			if findWins() { return true } // TODO try switching to happen immediately when the force is found
+			if let winDepth = findWins() { return winDepth } // TODO try switching to happen immediately when the force is found
 			findForces()
 			forceBoard[forces[force1].g].append(force1)
 			force1 += 1
 		}
 		
-		func findWins() -> Bool {
+		func findWins() -> Int? {
 			search: for force2 in forceBoard[forces[force1].g] {
 				// check that force1 and force2 do not conflict
 				guard noConflict(force2) else { continue }
+				attempts += 1
 				
 				// see if the sequence creates check
 				var checks: Set<Int> = []
@@ -265,7 +264,8 @@ extension Board {
 					}
 				}
 				
-				return used.count <= depth
+				print(attempts)
+				return used.count
 				
 //				if checkBoard.hasW1(o) || checkBoard.hasW0(o) {
 //					continue // we can't stop these wins
@@ -278,7 +278,7 @@ extension Board {
 //				}
 			}
 			
-			return false
+			return nil
 		}
 		
 		func findForces() {
@@ -340,7 +340,7 @@ extension Board {
 			return checkDict(force: force2)
 		}
 		
-		return false
+		return nil
 	}
 	
 	struct Force: Hashable {
